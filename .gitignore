@@ -39,3 +39,4 @@ config.ini
 
 .idea
 cpp
+!CMakeLists.txt
