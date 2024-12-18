@@ -19,7 +19,6 @@ namespace tg {
             if (password != "") {
                 option.password = password;
             }
-            std::cout << ip << ":" << port << " " << username << " " << password << std::endl;
             option.host = ip;
             option.port = port;
             option.db = db;
@@ -139,7 +138,7 @@ namespace tg {
         std::unordered_map<std::string, std::string> RedisUtils::hget_all(std::string key) const {
             key = this->prefix(key);
             std::unordered_map<std::string, std::string> result;
-            this->redis->hgetall(prefix(key),std::inserter(result,result.begin()));
+            this->redis->hgetall(key,std::inserter(result,result.begin()));
             return result;
         }
 
@@ -172,7 +171,7 @@ namespace tg {
 
         bool RedisUtils::set(std::string key, std::string value, long long timeout) const {
             key = this->prefix(key);
-            this->redis->set(key, value, std::chrono::milliseconds(timeout));
+            auto a = this->redis->set(key, value, std::chrono::milliseconds(timeout));
             return true;
         }
 
@@ -208,6 +207,13 @@ namespace tg {
            key = this->prefix(key);
             this->redis->srem(key, field);
             return true;
+       }
+
+       std::vector<std::string> RedisUtils::keys(std::string key) const {
+           key = this->prefix(key);
+            std::vector<std::string> res;
+            this->redis->keys(key,std::inserter(res,res.begin()));
+            return res;
        }
 
 

@@ -34,6 +34,7 @@ namespace tg {
                 std::unordered_set<std::string> smember(std::string key) const;
                 std::unordered_set<std::string> srandmember(std::string key,int size) const;
                 bool srem(std::string key,std::string field) const;
+                std::vector<std::string> keys(std::string key) const;
                 static std::string TOTAL_KEY ;
             private:
                 std::unique_ptr<sw::redis::Redis> redis;

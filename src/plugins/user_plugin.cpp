@@ -42,7 +42,7 @@ namespace tg {
                     td::td_api::object_ptr<td::td_api::chat> *chat = bot->get_chat(chat_id);
                     if (chat && chat->get()->type_->get_id() == td::td_api::chatTypePrivate::ID) {
                         if (text.starts_with("/")) {
-                            if (chat_id == bot->get_config()->get_long_long_value(BotConfig::ADMIN)) {
+                            if (chat_id == bot->get_config()->get_long_long_value(BotConfig::BOT_ADMIN)) {
                                 return this->solve_cmd(bot, command::CommandType::MANGER, chat_id, message_text);
                             }
                             return this->solve_cmd(bot, command::CommandType::USER, chat_id, message_text);
@@ -67,7 +67,7 @@ namespace tg {
 
                 if (is_chat) {
                     //判断是否识别
-                    std::string premison_key = command::PermissionsCommand::PERMISSIONS_LIST_KEY + ":" +
+                    std::string premison_key = bot->get_config()->get_string_value(command::PermissionsCommand::PERMISSIONS_PLUGIN_LIST_KEY) + ":" +
                                                std::to_string(chat_id);
                     auto premison_size = bot->get_redis_utils()->srandmember(premison_key, 1);
                     if (premison_size.empty()) return false;
@@ -75,7 +75,7 @@ namespace tg {
 
                 auto serach_text = text;
                 auto res = bot->get_redis_utils()->search(serach_text,
-                                                          bot->get_config()->get_string_value(command::Command::INDEX),
+                                                          bot->get_config()->get_string_value(command::Command::PLUGIN_INDEX),
                                                           0, 50);
                 if (res.find(tg::redis::RedisUtils::TOTAL_KEY) != res.end()) {
                     res.erase(tg::redis::RedisUtils::TOTAL_KEY);

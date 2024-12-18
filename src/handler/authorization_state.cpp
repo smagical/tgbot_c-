@@ -50,18 +50,18 @@ namespace tg {
             td::td_api::authorizationStateWaitTdlibParameters state =
                 static_cast<td::td_api::authorizationStateWaitTdlibParameters &&>(object);
             auto request = td::td_api::make_object<td::td_api::setTdlibParameters>();
-            request->database_directory_ = config->get_string_value(BotConfig::DATABASE_DIRECTORY);
+            request->database_directory_ = config->get_string_value(BotConfig::TD_DATABASE_DIRECTORY);
             request->use_message_database_ = true;
             request->use_chat_info_database_ = true;
             request->use_file_database_ = true;
             request->use_secret_chats_ = false;
-            request->api_id_ = config->get_int_value(BotConfig::API_ID);   ;
-            request->api_hash_ = config -> get_string_value(BotConfig::API_HASH);
-            request->system_language_code_ = config->get_string_value(BotConfig::LANGUAGE_CODE);
+            request->api_id_ = config->get_int_value(BotConfig::TD_API_ID);   ;
+            request->api_hash_ = config -> get_string_value(BotConfig::TD_API_HASH);
+            request->system_language_code_ = config->get_string_value(BotConfig::TD_LANGUAGE_CODE);
             request->device_model_ = "Desktop";
-            request->use_test_dc_ = config->get_bool_value(BotConfig::USE_TEST);
-            request->application_version_ = config->get_string_value(BotConfig::APPLICATION_VERSION);
-            request->database_encryption_key_ = config -> get_string_value(BotConfig::DATABASE_ENCRYPTION_KEY);
+            request->use_test_dc_ = config->get_bool_value(BotConfig::TD_USE_TEST);
+            request->application_version_ = config->get_string_value(BotConfig::TD_APPLICATION_VERSION);
+            request->database_encryption_key_ = config -> get_string_value(BotConfig::TD_DATABASE_ENCRYPTION_KEY);
 #ifdef _WIN32
                 if (_access(request->database_directory_.c_str(),0) == -1) {
                     _mkdir(request->database_directory_.c_str());

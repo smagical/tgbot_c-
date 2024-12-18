@@ -26,7 +26,7 @@ namespace tg {
         this->init_plugin();
         this->init_redis();
         this->request_id_sequence = std::make_unique<std::SafeSequence>();
-        this->thread_pool = std::make_unique<tg::ThreadPool>(this->config->get_int_value(BotConfig::THREAD_NUMS));
+        this->thread_pool = std::make_unique<tg::ThreadPool>(this->config->get_int_value(BotConfig::BOT_THREAD_NUMS));
         this->request_and_handler = std::make_unique<std::SafeMap<std::uint64_t,std::unique_ptr<tg::handler::Handler>>>(10000000,500000);
         this->response = std::make_unique<std::SafeMap<std::uint64_t,td::ClientManager::Response>>(10000000,500000);
         this->response_id_sequence = std::make_unique<std::SafeSequence>();
@@ -34,7 +34,7 @@ namespace tg {
         this->chats =  std::make_unique<std::SafeMap<td::td_api::int53,td::td_api::object_ptr<td::td_api::chat>>>(10000000,500000);
         this->users =  std::make_unique<std::SafeMap<td::td_api::int53,td::td_api::object_ptr<td::td_api::user>>>(10000000,500000);
         this->user_full_info = std::make_unique<std::SafeMap<td::td_api::int53,td::td_api::object_ptr<td::td_api::userFullInfo>>>(10000000,500000);
-        td::ClientManager::execute(td::td_api::make_object<td::td_api::setLogVerbosityLevel>(this->config->get_int_value(BotConfig::LOG_LEVEL)));
+        td::ClientManager::execute(td::td_api::make_object<td::td_api::setLogVerbosityLevel>(this->config->get_int_value(BotConfig::BOT_LOG_LEVEL)));
     }
 
     void Bot::init_handler() {
@@ -52,12 +52,12 @@ namespace tg {
 
     void Bot::init_redis() {
 
-        std::string host = this->get_config()->get_string_value(tg::BotConfig::HOST);
-        int port = this->get_config()->get_int_value(tg::BotConfig::PORT);
-        std::string username = this->get_config()->get_string_value(tg::BotConfig::USERNAME);
-        std::string password = this->get_config()->get_string_value(tg::BotConfig::PASSWORD);
-        std::string key_prefix = this->get_config()->get_string_value(tg::BotConfig::KEY_PREFIX);
-        int db = this->get_config()->get_int_value(tg::BotConfig::DB);
+        std::string host = this->get_config()->get_string_value(tg::BotConfig::REDIS_HOST);
+        int port = this->get_config()->get_int_value(tg::BotConfig::REDIS_PORT);
+        std::string username = this->get_config()->get_string_value(tg::BotConfig::REDIS_USERNAME);
+        std::string password = this->get_config()->get_string_value(tg::BotConfig::REDIS_PASSWORD);
+        std::string key_prefix = this->get_config()->get_string_value(tg::BotConfig::REDIS_KEY_PREFIX);
+        int db = this->get_config()->get_int_value(tg::BotConfig::REDIS_DB);
         this->redis_utils = std::make_unique<tg::redis::RedisUtils>(host,port,username,password,key_prefix,db);
     }
 
@@ -209,6 +209,7 @@ namespace tg {
             //bot_plugin->addCommand(std::make_unique<tg::plugin::command::SpiderCommand>(ad_path));
             bot_plugin->addCommand(std::make_unique<tg::plugin::command::InfoCommand>());
             bot_plugin->addCommand(std::make_unique<tg::plugin::command::PermissionsCommand>());
+            bot_plugin->addCommand(std::make_unique<tg::plugin::command::BotCommand>());
             bot_plugin->send_commands(this);
             this->add_plugin(std::move(bot_plugin));
         }else {
@@ -217,8 +218,12 @@ namespace tg {
             user_plugin->addCommand(std::make_unique<tg::plugin::command::SpiderCommand>());
             user_plugin->addCommand(std::make_unique<tg::plugin::command::InfoCommand>());
             user_plugin->addCommand(std::make_unique<tg::plugin::command::PermissionsCommand>());
+            user_plugin->addCommand(std::make_unique<tg::plugin::command::BotCommand>());
             this->add_plugin(std::move(user_plugin));
         }
+        this->report_time = std::time(nullptr);
+        const std::string tmp = config->get_string_value(BotConfig::BOT_REPORT_KEY)+":"+config->get_string_value(BotConfig::BOT_ID);
+        this->redis_utils->set(tmp,"....",(report_timeout + report_timeout/2));
     }
 
     void Bot::add_plugin(std::unique_ptr<tg::plugin::PluginInterface> plugin) const {
@@ -238,23 +243,26 @@ namespace tg {
         std::string chat_id_str = std::to_string(chat_id);
         std::string message_id_str = std::to_string(message_id);
         std::string key = BOT_REDIS_PREFIX +":"+chat_id_str + ":" + message_id_str;
-        return this->redis_utils->can_solve(key,this->config->get_string_value(BotConfig::ID));
+        return this->redis_utils->can_solve(key,this->config->get_string_value(BotConfig::BOT_ID));
     }
 
 
 
     void Bot::run() const {
         tg::log_info("Bot running... ");
-        int waitTime = config -> get_int_value(BotConfig::MIN_WAIT_TIME);
+        int waitTime = config -> get_int_value(BotConfig::BOT_MIN_WAIT_TIME);
         while (running.load()) {
 
             td::ClientManager::Response response = client_manager->receive(waitTime);
             if (!response.object) {
-                waitTime += config -> get_int_value(BotConfig::WAIT_INTERVAL);
-                waitTime = std::min(waitTime, config -> get_int_value(BotConfig::MAX_WAIT_TIME));
+                waitTime += config -> get_int_value(BotConfig::BOT_WAIT_INTERVAL);
+                waitTime = std::min(waitTime, config -> get_int_value(BotConfig::BOT_MAX_WAIT_TIME));
                 continue;
             }
-            waitTime = config -> get_int_value(BotConfig::MIN_WAIT_TIME); ;
+            if (std::time(nullptr) - this->report_time >= this->report_timeout) {
+                this->redis_utils->set(config->get_string_value(BotConfig::BOT_REPORT_KEY)+":"+config->get_string_value(BotConfig::BOT_ID),".",report_timeout + report_timeout/2);
+            }
+            waitTime = config -> get_int_value(BotConfig::BOT_MIN_WAIT_TIME); ;
             std::uint64_t response_id = this->response_id_sequence->get_next();
             this->response ->insert(std::move(response_id), std::move(response));
             this -> thread_pool->submit(

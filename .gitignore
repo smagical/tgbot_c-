@@ -36,6 +36,11 @@ lib
 *.ini
 bot_config.ini
 config.ini
+redis.ini
+redis.ini.encrypt
+
+IV
+KEY
 
 .idea
 cpp

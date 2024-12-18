@@ -28,25 +28,26 @@ if ( CMAKE_BUILD_TYPE AND ${CMAKE_BUILD_TYPE} STREQUAL "Debug")
 endif ()
 
 
-message(${LIB_HOME_PREFIX})
+message(${LIB_HOME_PREFIX}/cryptlib/include)
 
 set(Td_DIR  ${LIB_HOME_PREFIX}/tdlib/lib/cmake/Td)
 find_package(Td  REQUIRED)
 
-link_directories(${LIB_HOME_PREFIX}/cryptlib/)
+link_directories(${LIB_HOME_PREFIX}/cryptlib/lib)
+include_directories(${LIB_HOME_PREFIX}/cryptlib/include)
 
 if (CMAKE_SYSTEM_NAME MATCHES "Linux")          # for Linux
     set(hiredis_DIR  ${LIB_HOME_PREFIX}/hiredis/lib/cmake/hiredis)
     find_package(hiredis REQUIRED)
-    set(CRYPT_NAME "libcryptopp")
+    set(CRYPT_NAME "cryptopp")
 elseif (CMAKE_SYSTEM_NAME MATCHES "Windows")    # for Windows
     set(hiredis_DIR  ${LIB_HOME_PREFIX}/hiredis/share/hiredis)
     find_package(hiredis REQUIRED)
-    set(CRYPT_NAME "cryptopp")
+    set(CRYPT_NAME "cryptlib")
 elseif (CMAKE_SYSTEM_NAME MATCHES "FreeBSD")
     set(hiredis_DIR  ${LIB_HOME_PREFIX}/hiredis/lib/cmake/hiredis)
     find_package(hiredis REQUIRED)
-    set(CRYPT_NAME "libcryptopp")
+    set(CRYPT_NAME "cryptopp")
 endif()
 
 
@@ -79,10 +80,13 @@ file(GLOB_RECURSE src
 add_executable(tg_bot
       ${src}
 )
+target_link_libraries(tg_bot PRIVATE hiredis::hiredis redis++::redis++ ZXing::Core Td::TdStatic ${CRYPT_NAME})
 
-message(${hiredis_INCLUDE_DIRS})
 
-target_link_libraries(tg_bot PRIVATE hiredis::hiredis redis++::redis++ ZXing::Core Td::TdStatic )
+add_executable(tg_bot_encryptor src/include/cryptor.h src/cryptor.cpp encryptor.cpp )
+target_link_libraries(tg_bot_encryptor ${CRYPT_NAME})
+
+
 #set_target_properties(tg_bot PROPERTIES LINK_FLAGS "-Wl,-rpath,./")
 #set_target_properties(tg_bot PROPERTIES INSTALL_RPATH ".")
 #target_include_directories(tg_bot PRIVATE ${hiredis_INCLUDE_DIRS})

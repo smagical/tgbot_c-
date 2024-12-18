@@ -7,6 +7,10 @@
 #include <iostream>
 #include <ostream>
 #include <string>
+#include <cryptopp/base64.h>
+#include <cryptopp/files.h>
+#include <cryptopp/modes.h>
+#include <cryptopp/osrng.h>
 
 
 namespace tg {

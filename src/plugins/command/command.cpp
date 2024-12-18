@@ -91,13 +91,13 @@ namespace tg::plugin::command {
             }
             else if (type >= command::MANGER && cmd == "spider_ad_add") {
                 if (commands.size() <= 1) return false;
-                bot->get_redis_utils()->sadd(bot->get_config()->get_string_value(AD_PREFIX_KEY),commands[1]);
+                bot->get_redis_utils()->sadd(bot->get_config()->get_string_value(SPIDER_PLUGIN_AD_PREFIX_KEY),commands[1]);
                 this->pull_ad(bot,true);
                 util::send(bot,chat_id_send,"add spider ad word successful");
             }
             else if (type >= command::MANGER && cmd == "spider_ad_del") {
                 if (commands.size() <= 1) return false;
-                bot->get_redis_utils()->srem(bot->get_config()->get_string_value(AD_PREFIX_KEY),commands[1]);
+                bot->get_redis_utils()->srem(bot->get_config()->get_string_value(SPIDER_PLUGIN_AD_PREFIX_KEY),commands[1]);
                 this->pull_ad(bot,true);
                 util::send(bot,chat_id_send,"del spider ad word successful");
             }
@@ -152,7 +152,7 @@ namespace tg::plugin::command {
             last_message_id = messages.rbegin()->get()->id_;
             tg::redis::RedisUtils* redis_utils = bot->get_redis_utils();
 
-            std::string prefix = bot->get_config()->get_string_value(MESSAGE_PREFIX);
+            std::string prefix = bot->get_config()->get_string_value(PLUGIN_MESSAGE_PREFIX);
 
             std::vector<std::string> index_prefix;
             index_prefix.push_back(prefix);
@@ -161,7 +161,7 @@ namespace tg::plugin::command {
             schme.push_back("content");
             schme.push_back("text");
 
-            redis_utils->create_index(bot->get_config()->get_string_value(INDEX),"hash",index_prefix,"chinese",schme);
+            redis_utils->create_index(bot->get_config()->get_string_value(PLUGIN_INDEX),"hash",index_prefix,"chinese",schme);
             for (auto it = messages.begin(); messages.end() != it; ++it) {
                 if (exits(bot->get_redis_utils(),prefix,chat_id,last_message_id)) {
                     repeat--;
@@ -210,12 +210,12 @@ namespace tg::plugin::command {
             return true;
         }
     bool SpiderCommand::save_spider_chat(Bot* bot,td::td_api::int53 chat_id) {
-        return bot->get_redis_utils()->sadd(bot->get_config()->get_string_value(SPIDER_CHAT_KEY),std::to_string(chat_id));
+        return bot->get_redis_utils()->sadd(bot->get_config()->get_string_value(SPIDER_PLUGIN_SPIDER_CHAT_KEY),std::to_string(chat_id));
     }
 
     std::vector<td::td_api::int53> SpiderCommand::get_spider_chat(Bot* bot) {
         std::vector<td::td_api::int53> chat_ids;
-        auto set = bot->get_redis_utils()->smember(bot->get_config()->get_string_value(SPIDER_CHAT_KEY));
+        auto set = bot->get_redis_utils()->smember(bot->get_config()->get_string_value(SPIDER_PLUGIN_SPIDER_CHAT_KEY));
         for (auto value : set) {
             chat_ids.push_back(std::stoll(value));
         }
@@ -235,7 +235,7 @@ namespace tg::plugin::command {
         if (std::time(nullptr) - this->last_pull_time < 60 && !frace) {
             return;
         }
-        auto values = bot->get_redis_utils()->smember(bot->get_config()->get_string_value(AD_PREFIX_KEY));
+        auto values = bot->get_redis_utils()->smember(bot->get_config()->get_string_value(SPIDER_PLUGIN_AD_PREFIX_KEY));
         this->ad_black.clear();
         this->ad_white.clear();
         for (auto basic_string : values) {
@@ -264,10 +264,10 @@ namespace tg::plugin::command {
         return false;
     };
 
-    std::string SpiderCommand::SPIDER_CHAT_KEY = "PLUGIN.SPIDER_CHAT_KEY";
-    std::string SpiderCommand::AD_PREFIX_KEY = "PLUGIN.AD_PREFIX_KEY";
-    std::string Command::MESSAGE_PREFIX = "PLUGIN.MESSAGE_PREFIX";
-    std::string Command::INDEX = "PLUGIN.INDEX";
+    std::string SpiderCommand::SPIDER_PLUGIN_SPIDER_CHAT_KEY = "PLUGIN.SPIDER.SPIDER_CHAT_KEY";
+    std::string SpiderCommand::SPIDER_PLUGIN_AD_PREFIX_KEY = "PLUGIN.SPIDER.AD_PREFIX_KEY";
+    std::string Command::PLUGIN_MESSAGE_PREFIX = "PLUGIN.MESSAGE_PREFIX";
+    std::string Command::PLUGIN_INDEX = "PLUGIN.INDEX";
 
 
     std::vector<std::pair<CommandType, std::pair<std::string,std::string>> > InfoCommand::get_cmds() const {
@@ -524,7 +524,7 @@ namespace tg::plugin::command {
                 }
                 td::td_api::int53 chat_id = std::stoll(commands[1]);
                 std::string user_id_str = std::to_string(chat_id);
-                bot->get_redis_utils()->sadd(PERMISSIONS_LIST_KEY+":"+commands[1],user_id_str);
+                bot->get_redis_utils()->sadd(bot->get_config()->get_string_value(PERMISSIONS_PLUGIN_LIST_KEY)+":"+commands[1],user_id_str);
                 util::send(bot,chat_id,"add "+commands[1]+" successful");
             }
             else if (type >= CommandType::USER && commands[0] == "premiss_del") {
@@ -533,7 +533,7 @@ namespace tg::plugin::command {
                 }
                 td::td_api::int53 chat_id = std::stoll(commands[1]);
                 std::string user_id_str = std::to_string(chat_id);
-                std::string key = PERMISSIONS_LIST_KEY+":"+commands[1];
+                std::string key = bot->get_config()->get_string_value(PERMISSIONS_PLUGIN_LIST_KEY)+":"+commands[1];
                 if ( bot->get_redis_utils()->sismember(key,user_id_str)) {
                     bot->get_redis_utils()->srem(key,user_id_str);
                 }
@@ -550,7 +550,7 @@ namespace tg::plugin::command {
                 }
                 std::string token = ss.str();
                 std::string user_id_str = std::to_string(chat_id);
-                bot->get_redis_utils()->set(PERMISSIONS_TOKEN_PREFIX+":"+token,user_id_str,5*60*1000);
+                bot->get_redis_utils()->set(bot->get_config()->get_string_value(PERMISSIONS_PLUGIN_TOKEN_PREFIX)+":"+token,user_id_str,5*60*1000);
                 util::send(
                         bot,
                         chat_id,
@@ -580,12 +580,12 @@ namespace tg::plugin::command {
                     return false;
                 }
                 std::string token = commands[1];
-                std::string key = PERMISSIONS_TOKEN_PREFIX+":"+token;
+                std::string key = bot->get_config()->get_string_value(PERMISSIONS_PLUGIN_TOKEN_PREFIX)+":"+token;
                 if (bot->get_redis_utils()->exists(key)) {
                     std::string chat_str = std::to_string(chat_id);
                     std::string chat_ = bot->get_redis_utils()->get(key);
                     bot->get_redis_utils()->del(key);
-                    bot->get_redis_utils()->sadd(PERMISSIONS_LIST_KEY+":"+chat_str,chat_);
+                    bot->get_redis_utils()->sadd(bot->get_config()->get_string_value(PERMISSIONS_PLUGIN_LIST_KEY)+":"+chat_str,chat_);
                     util::send(bot,chat_id,"add successful");
                 }else {
                     util::send(bot,chat_id,"token error");
@@ -601,9 +601,49 @@ namespace tg::plugin::command {
         return command.starts_with("premiss");
     }
 
-    std::string PermissionsCommand::PERMISSIONS_PREFIX = "permissions";
-    std::string PermissionsCommand::PERMISSIONS_LIST_KEY = PERMISSIONS_PREFIX+":chat_set";
-    std::string PermissionsCommand::PERMISSIONS_TOKEN_PREFIX = PERMISSIONS_PREFIX+":permissions_token";
+    std::string PermissionsCommand::PERMISSIONS_PLUGIN_PREFIX = "PREFIX";
+    std::string PermissionsCommand::PERMISSIONS_PLUGIN_LIST_KEY = "LIST_KEY";
+    std::string PermissionsCommand::PERMISSIONS_PLUGIN_TOKEN_PREFIX = "TOKEN_PREFIX";
+
+    BotCommand::BotCommand() {
+
+    }
+
+    std::vector<std::pair<CommandType, std::pair<std::string, std::string> > > BotCommand::get_cmds() const {
+        std::vector<std::pair<CommandType, std::pair<std::string, std::string> > > cmds;
+        cmds.push_back(std::pair<CommandType, std::pair<std::string, std::string> >(std::make_pair(CommandType::MANGER,std::make_pair("/bot_online","/bot_online [online bot list]"))));
+        return cmds;
+    }
+
+
+    bool BotCommand::handle(Bot *bot, CommandType type, td::td_api::int53 chat_id, std::string command) {
+        auto commands = std::split(command);
+        if (commands.size() <=0) {
+            return false;
+        }
+        if (commands[0] == "bot_online") {
+            auto bots = bot->get_redis_utils()->keys(bot->get_config()->get_string_value(BotConfig::BOT_REPORT_KEY)+"*");
+            int count = 0;
+            std::stringstream ss;
+            for (auto basic_string : bots) {
+                std::string bot_name = basic_string;
+                if (bot_name.find_last_of(":")!=std::string::npos) {
+                    bot_name = bot_name.substr(bot_name.find_last_of(":")+1);
+                }
+                ss << count << ". " << bot_name<<std::endl;
+                count++;
+            }
+            std::string str = ss.str();
+            util::send(bot,chat_id,str);
+            return true;
+        }
+        return false;
+    }
+
+
+    bool BotCommand::supprot(std::string command) const {
+        return command.starts_with("bot");
+    }
 
 
 }

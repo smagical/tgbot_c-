@@ -83,7 +83,8 @@ namespace tg {
           std::unique_ptr<tg::plugin::Plugin> plugins;
 
           std::unique_ptr<tg::redis::RedisUtils> redis_utils;
-
+          int report_time = 0;
+          int report_timeout = 30 * 1000;
           static std::string BOT_REDIS_PREFIX;
           void run() const;
           void login();
