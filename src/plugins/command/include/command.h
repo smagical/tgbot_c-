@@ -21,7 +21,7 @@ namespace tg{
     namespace plugin::command {
         #define PAGE_SIZE  10;
         enum CommandType {
-           CHAT,USER,MANGER
+           CHAT,USER,MANGER,BOT_MANGER
         };
         class Command {
             public:

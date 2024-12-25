@@ -54,6 +54,7 @@ namespace tg {
             //todo 收紧权限
             tg::redis::RedisUtils* get_redis_utils() const;
             bool can_slove_message(td::td_api::int53 chat_id,td::td_api::int53 message_id) const;
+            bool is_only_admin() const;
         private:
           std::unique_ptr<LoginType> loginType;
           std::string token;
@@ -83,10 +84,15 @@ namespace tg {
           std::unique_ptr<tg::plugin::Plugin> plugins;
 
           std::unique_ptr<tg::redis::RedisUtils> redis_utils;
-          int report_time = 0;
-          int report_timeout = 30 * 1000;
-          static std::string BOT_REDIS_PREFIX;
-          void run() const;
+          int64_t report_time = 0;
+          int64_t report_timeout = 30 * 1000;
+          static std::string BOT_REDIS_SELECT_PREFIX;
+          static std::string BOT_IS_ONLY_ALLOW_ADMIN;
+          bool is_only_allow_admin = false;
+
+          bool is_already_loaded = false;
+          std::mutex load_mutex;
+          void run();
           void login();
           void init(BotConfig config);
           void init_handler();

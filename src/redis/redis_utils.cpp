@@ -8,6 +8,8 @@
 #include <set>
 #include <unordered_set>
 
+#include "../include/tg.h"
+
 namespace tg {
 
    namespace redis {
@@ -24,8 +26,20 @@ namespace tg {
             option.db = db;
             option.keep_alive = true;
             option.connect_timeout = std::chrono::milliseconds(0);
-            this->redis =  std::make_unique<sw::redis::Redis>(option);
-            this->redis->ping();
+            try {
+                this->redis =  std::make_unique<sw::redis::Redis>(option);
+                log_debug("redis utils: connecting to redis server");
+                this->redis->ping();
+            }catch (sw::redis::ReplyError &e) {
+                log_error(e.what());
+                exit(2);
+            }catch (sw::redis::TimeoutError &e) {
+                log_error(e.what());
+                exit(2);
+            }catch (std::exception &e) {
+                log_error(e.what());
+                throw e;
+            }
         }
 
         RedisUtils::~RedisUtils() {
@@ -40,16 +54,28 @@ namespace tg {
         }
 
         bool RedisUtils::can_solve(std::string key, std::string bot_id) {
-            if (this->lua_lock_hash && this->redis->script_exists(this->lua_lock_hash->c_str())) {
+            try {
+                if (this->lua_lock_hash && this->redis->script_exists(this->lua_lock_hash->c_str())) {
 
-            }else {
-                std::string hash = this->redis->script_load(this->lua_lock);
-                this->lua_lock_hash = std::make_unique<std::string>(std::move(hash));
+                }else {
+                    std::string hash = this->redis->script_load(this->lua_lock);
+                    this->lua_lock_hash = std::make_unique<std::string>(std::move(hash));
+                }
+                std::string key_prefix = prefix(key);
+                const auto keys = {key_prefix.c_str()};
+                const auto argv = {bot_id.c_str(),"EX","60"};
+                return this->redis->evalsha<bool>(this->lua_lock_hash->c_str(),keys.begin(),keys.end(),argv.begin(),argv.end());
+
+            }catch (sw::redis::ReplyError &e) {
+                log_error(e.what());
+                exit(2);
+            }catch (sw::redis::TimeoutError &e) {
+                log_error(e.what());
+                exit(2);
+            }catch (std::exception &e) {
+                log_error(e.what());
+                throw e;
             }
-            std::string key_prefix = prefix(key);
-            const auto keys = {key_prefix.c_str()};
-            const auto argv = {bot_id.c_str(),"EX","60"};
-            return this->redis->evalsha<bool>(this->lua_lock_hash->c_str(),keys.begin(),keys.end(),argv.begin(),argv.end());
         }
 
         bool RedisUtils::delete_index(std::string index) const {
@@ -57,10 +83,17 @@ namespace tg {
              try {
                  this->redis->command<sw::redis::OptionalString>(cmd_str.begin(),cmd_str.end());
                  return true;
-             }catch(std::exception& e) {
-                 std::cout << e.what() << std::endl;
-                 return false;
+             }catch (sw::redis::ReplyError &e) {
+                 log_error(e.what());
+                 exit(2);
+             }catch (sw::redis::TimeoutError &e) {
+                 log_error(e.what());
+                 exit(2);
+             }catch (std::exception &e) {
+                 log_error(e.what());
+                 throw e;
              }
+             return false;
         }
 
 
@@ -71,17 +104,28 @@ namespace tg {
             using Result = std::variant<long long,double,std::string,std::unordered_map<std::string, std::string>>;
             std::unordered_map<std::string, std::unordered_map<std::string,std::string>> result;
 
-            if (auto val = redis->command<std::vector<Result>>(cmd_str.begin(), cmd_str.end()); !val.empty()) {
-                auto count = std::get<0>(val[0]);
-                std::unordered_map<std::string,std::string> total_;
-                total_[TOTAL_KEY] = std::to_string(count);
-                result[TOTAL_KEY] = total_;
-                count = val.size()/2;
-                for (auto i = 0; i < count; i++) {
-                    auto key = std::get<std::string>(val[i * 2 +1]);
-                    auto value = std::get<std::unordered_map<std::string,std::string>>(val[i *2 +2]);
-                    result[key] = std::move(value);
+            try {
+                if (auto val = redis->command<std::vector<Result>>(cmd_str.begin(), cmd_str.end()); !val.empty()) {
+                    auto count = std::get<0>(val[0]);
+                    std::unordered_map<std::string,std::string> total_;
+                    total_[TOTAL_KEY] = std::to_string(count);
+                    result[TOTAL_KEY] = total_;
+                    count = val.size()/2;
+                    for (auto i = 0; i < count; i++) {
+                        auto key = std::get<std::string>(val[i * 2 +1]);
+                        auto value = std::get<std::unordered_map<std::string,std::string>>(val[i *2 +2]);
+                        result[key] = std::move(value);
+                    }
                 }
+            }catch (sw::redis::ReplyError &e) {
+                log_error(e.what());
+                exit(2);
+            }catch (sw::redis::TimeoutError &e) {
+                log_error(e.what());
+                exit(2);
+            }catch (std::exception &e) {
+                log_error(e.what());
+                throw e;
             }
 
             return result;
@@ -112,41 +156,103 @@ namespace tg {
                     for (auto arg : args) std::cout << arg << std::endl;
                     this->redis->command<sw::redis::OptionalString>(args.begin(), args.end());
                     return true;
-                }catch(std::exception& e) {
-                    std::cout<<e.what()<<std::endl;
-                    return false;
+                }catch (sw::redis::ReplyError &e) {
+                    log_error(e.what());
+                    exit(2);
+                }catch (sw::redis::TimeoutError &e) {
+                    log_error(e.what());
+                    exit(2);
+                }catch (std::exception &e) {
+                    log_error(e.what());
+                    throw e;
                 }
+            return false;
         }
 
         bool RedisUtils::hmset(std::string key, std::unordered_map<std::string, std::string> mp) const {
-            key = this->prefix(key);
-            this->redis->hmset(key, mp.begin(), mp.end());
+            try {
+                key = this->prefix(key);
+                this->redis->hmset(key, mp.begin(), mp.end());
+            }catch (sw::redis::ReplyError &e) {
+                log_error(e.what());
+                exit(2);
+            }catch (sw::redis::TimeoutError &e) {
+                log_error(e.what());
+                exit(2);
+            }catch (std::exception &e) {
+                log_error(e.what());
+                throw e;
+            }
             return true;
         }
 
         bool RedisUtils::hset(std::string key, std::string field, std::string value) const {
-            key = this->prefix(key);
-            this->redis->hset(prefix(key), field, value);
+            try {
+                key = this->prefix(key);
+                this->redis->hset(prefix(key), field, value);
+            }catch (sw::redis::ReplyError &e) {
+                log_error(e.what());
+                exit(2);
+            }catch (sw::redis::TimeoutError &e) {
+                log_error(e.what());
+                exit(2);
+            }catch (std::exception &e) {
+                log_error(e.what());
+                throw e;
+            }
             return true;
         }
 
         std::string RedisUtils::hget(std::string key,std::string field) const {
-            key = this->prefix(key);
-            return this->redis->hget(prefix(key),field).value_or("");
+            try {
+                key = this->prefix(key);
+                return this->redis->hget(prefix(key),field).value_or("");
+            }catch (sw::redis::ReplyError &e) {
+                log_error(e.what());
+                exit(2);
+            }catch (sw::redis::TimeoutError &e) {
+                log_error(e.what());
+                exit(2);
+            }catch (std::exception &e) {
+                log_error(e.what());
+                throw e;
+            }
         }
 
         std::unordered_map<std::string, std::string> RedisUtils::hget_all(std::string key) const {
-            key = this->prefix(key);
             std::unordered_map<std::string, std::string> result;
-            this->redis->hgetall(key,std::inserter(result,result.begin()));
+            try {
+                key = this->prefix(key);
+                this->redis->hgetall(key,std::inserter(result,result.begin()));
+            }catch (sw::redis::ReplyError &e) {
+                log_error(e.what());
+                exit(2);
+            }catch (sw::redis::TimeoutError &e) {
+                log_error(e.what());
+                exit(2);
+            }catch (std::exception &e) {
+                log_error(e.what());
+                throw e;
+            }
             return result;
         }
 
 
 
         bool RedisUtils::del(std::string key) const {
-            key = this->prefix(key);
-            this->redis->del(key);
+            try {
+                key = this->prefix(key);
+                this->redis->del(key);
+            }catch (sw::redis::ReplyError &e) {
+                log_error(e.what());
+                exit(2);
+            }catch (sw::redis::TimeoutError &e) {
+                log_error(e.what());
+                exit(2);
+            }catch (std::exception &e) {
+                log_error(e.what());
+                throw e;
+            }
             return true;
         }
 
@@ -154,66 +260,185 @@ namespace tg {
 
 
         bool RedisUtils::exists(std::string key) const {
-            key = this->prefix(key);
-            return this->redis->exists(key);
+           try {
+               key = this->prefix(key);
+               return this->redis->exists(key);
+           }catch (sw::redis::ReplyError &e) {
+               log_error(e.what());
+               exit(2);
+           }catch (sw::redis::TimeoutError &e) {
+               log_error(e.what());
+               exit(2);
+           }catch (std::exception &e) {
+               log_error(e.what());
+               throw e;
+           }
+
         }
 
         std::string RedisUtils::get(std::string key) const {
-            key = this->prefix(key);
-            return this->redis->get(key).value_or("");
+            try {
+                key = this->prefix(key);
+                return this->redis->get(key).value_or("");
+            }catch (sw::redis::ReplyError &e) {
+                log_error(e.what());
+                exit(2);
+            }catch (sw::redis::TimeoutError &e) {
+                log_error(e.what());
+                exit(2);
+            }catch (std::exception &e) {
+                log_error(e.what());
+                throw e;
+            }
         }
 
         bool RedisUtils::set(std::string key, std::string value) const {
-            key = this->prefix(key);
-            this->redis->set(key, value);
-            return true;
+           try {
+               key = this->prefix(key);
+               this->redis->set(key, value);
+               return true;
+           }catch (sw::redis::ReplyError &e) {
+               log_error(e.what());
+               exit(2);
+           }catch (sw::redis::TimeoutError &e) {
+               log_error(e.what());
+               exit(2);
+           }catch (std::exception &e) {
+               log_error(e.what());
+               throw e;
+           }
+            return false;
         }
 
         bool RedisUtils::set(std::string key, std::string value, long long timeout) const {
-            key = this->prefix(key);
-            auto a = this->redis->set(key, value, std::chrono::milliseconds(timeout));
-            return true;
+            try {
+                key = this->prefix(key);
+                auto a = this->redis->set(key, value, std::chrono::milliseconds(timeout));
+                return true;
+            }catch (sw::redis::ReplyError &e) {
+                log_error(e.what());
+                exit(2);
+            }catch (sw::redis::TimeoutError &e) {
+                log_error(e.what());
+                exit(2);
+            }catch (std::exception &e) {
+                log_error(e.what());
+                throw e;
+            }
+            return false;
         }
 
 
        bool RedisUtils::sadd(std::string key, std::string value) const {
-           key = this->prefix(key);
-            this->redis->sadd(key, value);
-            return true;
+           try {
+               key = this->prefix(key);
+               this->redis->sadd(key, value);
+               return true;
+           }catch (sw::redis::ReplyError &e) {
+               log_error(e.what());
+               exit(2);
+           }catch (sw::redis::TimeoutError &e) {
+               log_error(e.what());
+               exit(2);
+           }catch (std::exception &e) {
+               log_error(e.what());
+               throw e;
+           }
+            return false;
        }
 
        bool RedisUtils::sismember(std::string key, std::string field) const {
-           key = this->prefix(key);
-            return this->redis->sismember(key, field);
+         try {
+             key = this->prefix(key);
+             return this->redis->sismember(key, field);
+         }catch (sw::redis::ReplyError &e) {
+             log_error(e.what());
+             exit(2);
+         }catch (sw::redis::TimeoutError &e) {
+             log_error(e.what());
+             exit(2);
+         }catch (std::exception &e) {
+             log_error(e.what());
+             throw e;
+         }
+            return false;
 
        }
 
        std::unordered_set<std::string> RedisUtils::smember(std::string key) const {
-           key = this->prefix(key);
-            std::unordered_set<std::string> res;
-            this->redis->smembers(key,std::inserter(res,res.begin()));
-            return res;
+           try {
+               key = this->prefix(key);
+               std::unordered_set<std::string> res;
+               this->redis->smembers(key,std::inserter(res,res.begin()));
+               return res;
+           }catch (sw::redis::ReplyError &e) {
+               log_error(e.what());
+               exit(2);
+           }catch (sw::redis::TimeoutError &e) {
+               log_error(e.what());
+               exit(2);
+           }catch (std::exception &e) {
+               log_error(e.what());
+               throw e;
+           }
+            return std::unordered_set<std::string>();
        }
 
         std::unordered_set<std::string> RedisUtils::srandmember(std::string key, int size) const {
-            key = this->prefix(key);
-            std::unordered_set<std::string> res;
-            this->redis->srandmember(key,size,std::inserter(res,res.begin()));
-            return res;
+            try {
+                key = this->prefix(key);
+                std::unordered_set<std::string> res;
+                this->redis->srandmember(key,size,std::inserter(res,res.begin()));
+                return res;
+            }catch (sw::redis::ReplyError &e) {
+                log_error(e.what());
+                exit(2);
+            }catch (sw::redis::TimeoutError &e) {
+                log_error(e.what());
+                exit(2);
+            }catch (std::exception &e) {
+                log_error(e.what());
+                throw e;
+            }
+            return std::unordered_set<std::string>();
         }
 
 
        bool RedisUtils::srem(std::string key, std::string field) const {
-           key = this->prefix(key);
-            this->redis->srem(key, field);
-            return true;
+           try {
+               key = this->prefix(key);
+               this->redis->srem(key, field);
+               return true;
+           }catch (sw::redis::ReplyError &e) {
+               log_error(e.what());
+               exit(2);
+           }catch (sw::redis::TimeoutError &e) {
+               log_error(e.what());
+               exit(2);
+           }catch (std::exception &e) {
+               log_error(e.what());
+               throw e;
+           }
+            return false;
        }
 
        std::vector<std::string> RedisUtils::keys(std::string key) const {
-           key = this->prefix(key);
-            std::vector<std::string> res;
-            this->redis->keys(key,std::inserter(res,res.begin()));
-            return res;
+            try {
+                key = this->prefix(key);
+                std::vector<std::string> res;
+                this->redis->keys(key,std::inserter(res,res.begin()));
+                return res;
+            }catch (sw::redis::ReplyError &e) {
+                log_error(e.what());
+                exit(2);
+            }catch (sw::redis::TimeoutError &e) {
+                log_error(e.what());
+                exit(2);
+            }catch (std::exception &e) {
+                log_error(e.what());
+                throw e;
+            }
+            return std::vector<std::string>();
        }
 
 

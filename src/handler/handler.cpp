@@ -17,7 +17,7 @@ namespace tg {
 
 
         void Handler::hand(td::td_api::Object &&object) {
-            log_info(td::td_api::to_string(object));
+            // log_info(td::td_api::to_string(object));
         }
 
         bool Handler::support(td::td_api::Object &object) {

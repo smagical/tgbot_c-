@@ -23,7 +23,7 @@ namespace tg {
             td::td_api::int53 messageId = message->id_;
 
 
-            log_info(td::td_api::to_string(message));
+            // log_info(td::td_api::to_string(message));
             bool is_chat = true;
             if (message->content_->get_id() == td::td_api::messageText::ID) {
                 td::td_api::MessageContent *content = message->content_.get();
@@ -40,6 +40,9 @@ namespace tg {
                 if (sender->get_id() == td::td_api::messageSenderUser::ID) {
                     auto user_sender =
                             static_cast<td::td_api::messageSenderUser *>(sender);
+                    if (bot->is_only_admin() && user_sender->user_id_ != bot->get_config()->get_long_long_value(BotConfig::BOT_ADMIN)) {
+                        return true;
+                    }
                     if (bot->get_me() && bot->get_me()->get()->id_ == user_sender->user_id_) {
                         //todo 自己暂时不开启
                         //return true;
@@ -66,6 +69,9 @@ namespace tg {
                     auto chat_sender =
                             static_cast<td::td_api::messageSenderChat *>(sender);
                     auto chat_sender_id = chat_sender->chat_id_;
+                    if (bot->is_only_admin() && chat_sender_id != bot->get_config()->get_long_long_value(BotConfig::BOT_ADMIN)) {
+                        return true;
+                    }
                 }
                 //处理命令
                 if (text.starts_with("/")) {
@@ -205,7 +211,16 @@ namespace tg {
             std::string search_text, int page, int limit,bool is_update) {
                 if (page < 0) page = 0;
                 if (limit < 1) limit = 1;
-                auto res = bot->get_redis_utils()->search(search_text,
+                std::stringstream ss;
+                ss << "((@content:";
+                ss << search_text;
+                ss<<") (-@type:{ad}))";
+                if (search_text == "*") {
+                    ss.str("(-@type:{ad})");
+                }
+                std::string search = ss.str();
+                log_debug(search);
+                auto res = bot->get_redis_utils()->search(search,
                                                           bot->get_config()->get_string_value(command::Command::PLUGIN_INDEX),
                                                           page * limit, limit);
                  int total = res.size();
@@ -225,9 +240,8 @@ namespace tg {
                     int len = 0;
                     td::td_api::array<td::td_api::object_ptr<td::td_api::textEntity> > entities;
                     for (int i = 0; i < size; i++) {
-                        int key_size = values[i].first.length();
                         std::string key_index = std::to_string(i) + ". ";
-                        std::string key = values[i].first.substr(0, std::min(key_size, 30));
+                        std::string key = std::strsub_utf16(values[i].first,30);
                         ss << key_index <<key << std::endl;
                         const int key_index_utf16_size = std::cover_utf16(key_index).length();
                         int key_utf16_size = std::cover_utf16(key).length();

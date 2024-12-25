@@ -11,16 +11,16 @@ namespace tg::util {
         if (!bot) return nullptr;
         td::td_api::object_ptr<td::td_api::user> user = nullptr;
         td::td_api::object_ptr<td::td_api::getMe> me = td::td_api::make_object<td::td_api::getMe>();
-        std::CountDownLatch latch(1);
-        bot->send(std::move(me),[&latch, &user](td::td_api::Object && object) {
+        std::shared_ptr<std::CountDownLatch> latch = std::make_shared<std::CountDownLatch>(1);
+        bot->send(std::move(me),[latch, &user](td::td_api::Object && object) {
             if (object.get_id() == td::td_api::user::ID) {
-                td::td_api::user tmp_user =
+                td::td_api::user&& tmp_user =
                     static_cast<td::td_api::user &&>(object);
                 user = td::td_api::make_object<td::td_api::user>(std::move(tmp_user));
             }
-            latch.countDown();
+            latch->countDown();
         });
-        latch.await(5);
+        latch->await(5);
         return user;
     }
 
@@ -32,11 +32,11 @@ namespace tg::util {
         }else {
             latch = std::make_shared<std::CountDownLatch>(1);
         }
+
         if (type == ALL || type == MAIN) {
             td::td_api::loadChats load_main_chats(td::td_api::make_object<td::td_api::chatListMain>(),200);
             bot->send(td::td_api::make_object<td::td_api::loadChats >(std::move(load_main_chats)),
-            [latch, bot](td::td_api::Object && object) {
-                std::cout << td::td_api::to_string(object) << std::endl;
+            [latch, type,bot](td::td_api::Object && object) {
                         switch (object.get_id()) {
                             case td::td_api::error::ID: {
                                 break;
@@ -46,6 +46,7 @@ namespace tg::util {
                                 break;
                             }
                         }
+                // int a = latch.use_count();
                         latch->countDown();
                 });
         }
@@ -53,11 +54,9 @@ namespace tg::util {
         if (type == ALL || type == ARCHIVE) {
              td::td_api::loadChats load_archive_chats(td::td_api::make_object<td::td_api::chatListArchive>(),100);
               bot->send(td::td_api::make_object<td::td_api::loadChats >(std::move(load_archive_chats)),
-            [latch, bot](td::td_api::Object && object) {
-
+            [latch,type, bot](td::td_api::Object && object) {
                         switch (object.get_id()) {
                             case td::td_api::error::ID: {
-                                latch->countDown();
                                 break;
                             }
                             case td::td_api::ok::ID: {
@@ -65,6 +64,7 @@ namespace tg::util {
                                 break;
                             }
                         }
+                // int a = latch.use_count();
                         latch->countDown();
                 });
         }
@@ -72,7 +72,7 @@ namespace tg::util {
         if (type == ALL || type == FOLDER) {
             td::td_api::loadChats load_folder_chats(td::td_api::make_object<td::td_api::chatListFolder>(),100);
             bot->send(td::td_api::make_object<td::td_api::loadChats >(std::move(load_folder_chats)),
-            [latch, bot](td::td_api::Object && object) {
+            [latch,type, bot](td::td_api::Object && object) {
                         switch (object.get_id()) {
                             case td::td_api::error::ID: {
                                 break;
@@ -82,12 +82,14 @@ namespace tg::util {
                                 break;
                             }
                         }
+                        // int a = latch.use_count();
                         latch->countDown();
                 });
         }
 
-        latch->await();
-        latch.reset();
+        latch->await(5);
+         // std::cout << "load_all_chats endl" << std::endl;
+
     }
 
      td::td_api::object_ptr<td::td_api::user>* load_user(Bot *bot, const td::td_api::int53 user_id) {
@@ -95,20 +97,20 @@ namespace tg::util {
         td::td_api::object_ptr<td::td_api::user>* result = nullptr;
         result = bot->get_user(user_id);
         if (!result) return nullptr;
-        std::CountDownLatch latch(1);
+        std::shared_ptr<std::CountDownLatch > latch = std::make_shared<std::CountDownLatch>(1);
         td::td_api::getUser get_user(user_id);
         bot->send(td::make_tl_object<td::td_api::getUser >(std::move(get_user)),
-            [&latch,&bot, &result](td::td_api::Object && object) {
+            [latch,&bot, &result](td::td_api::Object && object) {
                 if (object.get_id() == td::td_api::user::ID) {
                     td::td_api::user tmp_user =static_cast<td::td_api::user &&>(object);
                     const td::td_api::int53 user_id = tmp_user.id_;
                     bot->add_user(user_id,td::td_api::make_object<td::td_api::user>(std::move(tmp_user)));
                     result = bot->get_user(user_id);
                 }
-                latch.countDown();
+                latch->countDown();
             }
         );
-        latch.await(5);
+        latch->await(5);
         return result;
     };
 
@@ -117,22 +119,20 @@ namespace tg::util {
      td::td_api::object_ptr<td::td_api::chat>* load_chat(Bot *bot, const td::td_api::int53 chat_id) {
         if (!bot) return nullptr;
         td::td_api::object_ptr<td::td_api::chat>* result = nullptr;
-        result = bot->get_chat(chat_id);
-        if (!result) return nullptr;
-        std::CountDownLatch latch(1);
+        std::shared_ptr<std::CountDownLatch> latch = std::make_shared<std::CountDownLatch>(1);
         td::td_api::getChat get_chat(chat_id);
         bot->send(td::make_tl_object<td::td_api::getChat >(std::move(get_chat)),
-            [&latch,&bot, &result](td::td_api::Object && object) {
+            [latch,&bot, &result](td::td_api::Object && object) {
                 if (object.get_id() == td::td_api::chat::ID) {
                     td::td_api::chat tmp_chat =static_cast<td::td_api::chat &&>(object);
                     const td::td_api::int53 chat_id = tmp_chat.id_;
                     bot->add_chat(chat_id,td::td_api::make_object<td::td_api::chat>(std::move(tmp_chat)));
                     result = bot->get_chat(chat_id);
                 }
-                latch.countDown();
+                latch->countDown();
             }
         );
-        latch.await(5);
+        latch->await(5);
         return result;
     };
 
@@ -149,10 +149,10 @@ namespace tg::util {
 
             const int last_limit = limit - hash.size() > 0 ? limit - hash.size() : 0;
             td::td_api::getChatHistory get_chat_history(chat_id,last_message_id,0,std::min(PULL_MAX,last_limit),false);
-            std::CountDownLatch latch(1);
+            std::shared_ptr<std::CountDownLatch> latch = std::make_shared<std::CountDownLatch>(1);
             bot ->send(
                 td::td_api::make_object<td::td_api::getChatHistory >(std::move(get_chat_history)),
-                    [&latch,&bot, &return_flag, &hash,&last_message_id](td::td_api::Object && object) {
+                    [latch,&bot, &return_flag, &hash,&last_message_id](td::td_api::Object && object) {
                              if (object.get_id() == td::td_api::error::ID) {
                                     return_flag = true;
                              }else if (object.get_id() == td::td_api::messages::ID) {
@@ -166,10 +166,10 @@ namespace tg::util {
                                  if (!hash.empty())
                                     last_message_id = hash.begin()->first;
                              }
-                             latch.countDown();
+                             latch->countDown();
                         }
                 );
-            latch.await(5);
+            latch->await(10);
 
             if (last_size != hash.size()) {
                 last_size = hash.size();
@@ -191,20 +191,20 @@ namespace tg::util {
      std::string load_message_link(Bot *bot, const td::td_api::int53 chat_id,const td::td_api::int53 message_id) {
         if (!bot) return "";
         std::string result = "";
-        std::CountDownLatch latch(1);
+        std::shared_ptr<std::CountDownLatch> latch = std::make_shared<std::CountDownLatch>(1);
         td::td_api::getMessageLink get_message_link(chat_id,message_id,0,true,false);
         bot->send(
             td::td_api::make_object<td::td_api::getMessageLink >(std::move(get_message_link)),
-            [&latch,&result](td::td_api::Object && object) {
+            [latch,&result](td::td_api::Object && object) {
                         if (object.get_id() == td::td_api::messageLink::ID) {
                             const auto link = static_cast<td::td_api::messageLink &&>(object);
                             result = link.link_;
                         }
-                        latch.countDown();
+                        latch->countDown();
 
             }
         );
-        latch.await(5);
+        latch->await(5);
         return result;
     };
 

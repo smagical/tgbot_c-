@@ -16,7 +16,11 @@ namespace tg {
             const td::td_api::int53 chat_id = message->chat_id_;
             td::td_api::int53 messageId = message->id_;
 
-            log_info(td::td_api::to_string(message));
+            if (bot->is_only_admin() && chat_id != bot->get_config()->get_long_long_value(BotConfig::BOT_ADMIN)) {
+                return true;
+            }
+
+            // log_info(td::td_api::to_string(message));
             if (message->content_->get_id() == td::td_api::messageText::ID) {
                 td::td_api::MessageContent *content = message->content_.get();
                 td::td_api::messageText *message_text = static_cast<td::td_api::messageText *>(content);
@@ -59,6 +63,7 @@ namespace tg {
                     auto chat_sender =
                             static_cast<td::td_api::messageSenderChat *>(sender);
                     auto chat_sender_id = chat_sender->chat_id_;
+                    return false;
                 }
                 //处理命令
                 if (text.starts_with("/")) {
@@ -73,7 +78,11 @@ namespace tg {
                     if (premison_size.empty()) return false;
                 }
 
-                auto serach_text = text;
+
+                std::stringstream ss;
+                ss << "((@content:"<<text<<") (-@type:{ad}))";
+                auto serach_text = ss.str();
+                std::cout << serach_text << std::endl;
                 auto res = bot->get_redis_utils()->search(serach_text,
                                                           bot->get_config()->get_string_value(command::Command::PLUGIN_INDEX),
                                                           0, 50);
@@ -95,9 +104,8 @@ namespace tg {
                         td::td_api::array<td::td_api::object_ptr<td::td_api::textEntity> > entities;
 
                         for (int i = 0; i < size; i++) {
-                            int key_size = values[i].first.length();
                             std::string key_index = std::to_string(i) + ". ";
-                            std::string key = values[i].first.substr(0, std::min(key_size, 30));
+                            std::string key = std::strsub_utf16(values[i].first,30);
                             ss << key_index <<key << std::endl;
                             const int key_index_utf16_size = std::cover_utf16(key_index).length();
                             int key_utf16_size = std::cover_utf16(key).length();

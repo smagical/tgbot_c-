@@ -6,12 +6,14 @@
 #define STDEXT_H
 #include <limits.h>
 #include <codecvt>
+#include <iostream>
 #include <locale>
 #include <map>
 #include <mutex>
 #include <queue>
 #include <shared_mutex>
 
+#include "tg.h"
 
 
 namespace std{
@@ -30,9 +32,51 @@ namespace std{
     };
 
     static std::wstring cover_utf16(std::string s) {
-        std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>> converter;
-        return converter.from_bytes(s);;
+        try {
+            std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>> converter;
+            std::wstring res =  converter.from_bytes(s);;
+            return res;
+        }catch (std::exception &e) {
+            try{
+                std::wstring_convert<std::codecvt_utf16<wchar_t>> converter;
+                std::wstring res =  converter.from_bytes(s);
+            }catch (std::exception &e) {
+                int a = 1;
+            }
+            tg::log_error(e.what());
+            throw e;
+        }
+
     }
+
+    static std::string ws_utf16_convert_st(std::wstring s) {
+        try {
+            std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>> converter;
+            std::string res =  converter.to_bytes(s);;
+            return res;
+        }catch (std::exception &e) {
+
+            tg::log_error(e.what());
+            throw e;
+        }
+
+    }
+
+    static std::string strsub_utf16(std::string s,int len) {
+        try {
+            std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>> converter;
+            std::wstring res =  converter.from_bytes(s);;
+            int size = res.length();
+            res = res.substr(0,std::min(size,len));
+            return converter.to_bytes(res);
+        }catch (std::exception &e) {
+
+            tg::log_error(e.what());
+            throw e;
+        }
+
+    }
+
 
     template <typename T>
      class SafeQueue {
@@ -125,7 +169,7 @@ namespace std{
                 std::unique_lock<std::shared_mutex> lock(mutex);
                 auto it = map.find(key);
                 if(it == map.end()) {
-                    map.emplace(std::make_pair<K,V>(std::forward<K>(key),std::forward<V>(value)));
+                    map.emplace(std::make_pair(std::forward<K>(key),std::forward<V>(value)));
                     if (map.size() > max_size) {
                         int  tmp = 0;
                         while (!map.empty() && del_size != tmp++) {
@@ -136,6 +180,7 @@ namespace std{
                 else {
                     it->second = std::move(value);
                 }
+
             }
 
 
@@ -150,7 +195,7 @@ namespace std{
             };
             bool contains(K key) {
                 std::shared_lock<std::shared_mutex> lock(mutex);
-                return map.find(key) != map.end();
+                return map.contains(key);
             };
             bool remove(K key) {
                 std::unique_lock<std::shared_mutex> lock(mutex);
@@ -164,6 +209,7 @@ namespace std{
                 }
                 std::unique_ptr<V> result = std::make_unique<V>(std::move(it->second));
                 map.erase(key);
+                lock.unlock();
                 return result;
             };
             auto  size() {

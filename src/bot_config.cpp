@@ -135,9 +135,10 @@ namespace tg {
 
                 }
             }
-
-        }catch (...) {
-            log_info("load_from_redis failed");
+            log_info("load config from redis successful");
+        }catch (std::exception &e) {
+            log_error(e.what());
+            log_info("load_from_redis failed ");
         }
     }
 

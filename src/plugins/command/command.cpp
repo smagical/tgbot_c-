@@ -22,6 +22,7 @@ namespace tg::plugin::command {
         cmds.push_back(std::make_pair(CommandType::MANGER, std::make_pair("/spider","/spider chat_id last_message_id(0 meaning lastMessage) limit [spider chat]")));
         cmds.push_back(std::make_pair(CommandType::MANGER,std::make_pair( "/spider_update","/spider_update chat_id [update spider to lastMessage]")));
         cmds.push_back(std::make_pair(CommandType::MANGER, std::make_pair("/spider_update_all","/spider_update_all [spider all chat if chat in db]")));
+        cmds.push_back(std::make_pair(CommandType::MANGER,std::make_pair("/spider_del","/spider_del chat_id [del spider chat_id]")));
         cmds.push_back(std::make_pair(CommandType::MANGER,std::make_pair("/spider_list","/spider_list [spider chat list]")));
         cmds.push_back(std::make_pair(CommandType::MANGER,std::make_pair("/spider_ad_add","/spider_ad_add word [add spider ad word]")));
         cmds.push_back(std::make_pair(CommandType::MANGER,std::make_pair("/spider_ad_del","/spider_ad_del word [del spider ad word]")));
@@ -75,6 +76,11 @@ namespace tg::plugin::command {
                     }catch (...){}
                 }
                 util::send(bot,chat_id_send, "end spider all update");
+            }
+            else if (type >= command::MANGER && cmd == "spider_del") {
+                if (commands.size() <= 1) return false;
+                bot->get_redis_utils()->srem(bot->get_config()->get_string_value(SPIDER_PLUGIN_SPIDER_CHAT_KEY),commands[1]);
+                util::send(bot,chat_id_send,commands[1] + " end spider del");
             }
             else if (type >= command::MANGER && cmd == "spider_list") {
                 auto chats = get_spider_chat(bot);
@@ -159,7 +165,9 @@ namespace tg::plugin::command {
 
             std::vector<std::string> schme;
             schme.push_back("content");
-            schme.push_back("text");
+            schme.push_back("TEXT");
+            schme.push_back("type");
+            schme.push_back("TAG");
 
             redis_utils->create_index(bot->get_config()->get_string_value(PLUGIN_INDEX),"hash",index_prefix,"chinese",schme);
             for (auto it = messages.begin(); messages.end() != it; ++it) {
@@ -203,7 +211,9 @@ namespace tg::plugin::command {
                 return true;
             }
             if (is_ad(bot,hash)) {
-                return true;
+                hash["type"] = "ad";
+            }else {
+                hash["type"] = "message";
             }
             // redis_utils->create_index()
             bot->get_redis_utils()->hmset(key,hash);
@@ -231,8 +241,13 @@ namespace tg::plugin::command {
         };
 
     void SpiderCommand::pull_ad(Bot* bot,bool frace) {
-        std::shared_lock<std::shared_mutex> lock(this->ad_lock);
-        if (std::time(nullptr) - this->last_pull_time < 60 && !frace) {
+        std::chrono::milliseconds now = std::chrono::duration_cast< std::chrono::milliseconds >(std::chrono::system_clock::now().time_since_epoch());
+        if (now.count() - this->last_pull_time < (60 * 1000) && !frace) {
+            return;
+        }
+        std::unique_lock<std::shared_mutex> lock(this->ad_lock);
+        now = std::chrono::duration_cast< std::chrono::milliseconds >(std::chrono::system_clock::now().time_since_epoch());
+        if (now.count() - this->last_pull_time < (60 * 1000) && !frace) {
             return;
         }
         auto values = bot->get_redis_utils()->smember(bot->get_config()->get_string_value(SPIDER_PLUGIN_AD_PREFIX_KEY));
@@ -242,7 +257,7 @@ namespace tg::plugin::command {
             if (basic_string.starts_with("!")) this->ad_white.push_back(basic_string);
             else this->ad_black.push_back(basic_string);
         }
-        this->last_pull_time = std::time(nullptr);
+        this->last_pull_time = now.count();
     }
 
     bool SpiderCommand::is_ad(Bot* bot,std::unordered_map<std::string,std::string>& hash) {
@@ -251,6 +266,7 @@ namespace tg::plugin::command {
         if (content == "") {
             return true;
         }
+        std::shared_lock<std::shared_mutex> lock(this->ad_lock);
         for (auto white : ad_white) {
             if (content.find(white) != std::string::npos) {
                 return false;
@@ -318,7 +334,6 @@ namespace tg::plugin::command {
                     values.push_back(value);
                 }
                 std::string end =  std::to_string(offset) + "/" + std::to_string(end_) + "\n";
-                int a = 1;
                 util::send(
                     bot,
                     chat_id,
@@ -337,7 +352,6 @@ namespace tg::plugin::command {
                                 td::td_api::make_object<td::td_api::textEntityTypeCode>());
                             entities.push_back(td::td_api::make_object<td::td_api::textEntity>(std::move(entity)));
                             len += key_utf16_len + value_utf16_len + 1;
-                            ss << "\n";
                         }
                         ss << end;
                         ss<< tg::END;
@@ -394,7 +408,6 @@ namespace tg::plugin::command {
                                  td::td_api::make_object<td::td_api::textEntityTypeCode>());
                              entities.push_back(td::td_api::make_object<td::td_api::textEntity>(std::move(entity)));
                              len += key_utf16_len + value_utf16_len + 1;
-                             ss << "\n";
                         }
                         ss << end;
                         ss<< tg::END;
@@ -612,6 +625,7 @@ namespace tg::plugin::command {
     std::vector<std::pair<CommandType, std::pair<std::string, std::string> > > BotCommand::get_cmds() const {
         std::vector<std::pair<CommandType, std::pair<std::string, std::string> > > cmds;
         cmds.push_back(std::pair<CommandType, std::pair<std::string, std::string> >(std::make_pair(CommandType::MANGER,std::make_pair("/bot_online","/bot_online [online bot list]"))));
+        // cmds.push_back(std::pair<CommandType, std::pair<std::string, std::string> >(std::make_pair(CommandType::MANGER,std::make_pair("/bot_restart","/bot_restart bot_id [restart bot]"))));
         return cmds;
     }
 
@@ -637,6 +651,13 @@ namespace tg::plugin::command {
             util::send(bot,chat_id,str);
             return true;
         }
+//         else if (commands[0] == "bot_restart") {
+// // #ifdef _WIN32
+// // #elif __FreeBSD__ || __linux__
+// //             util::send(bot,chat_id,"restart ...");
+// // #endif
+//
+//         }
         return false;
     }
 

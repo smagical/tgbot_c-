@@ -7,7 +7,9 @@
 #include <direct.h>
 #elif  __linux__
 #include <sys/stat.h>
-#include <sys/types.h>
+#include <unistd.h>
+#elif __FreeBSD__
+#include <sys/stat.h>
 #include <unistd.h>
 #endif
 
@@ -44,7 +46,7 @@ namespace tg {
             RetryHandlerTemplate<td::td_api::authorizationStateWaitTdlibParameters, void>(bot) {
         }
         void AuthorizationStateWaitTdlibParametersHandler::doHand(td::td_api::Object &object) {
-            log_debug("AuthorizationStateWaitTdlibParametersHandler::hand");
+            log_info("AuthorizationStateWaitTdlibParametersHandler::hand");
             Bot *bot = get_bot();
             BotConfig *config = bot->get_config();
             td::td_api::authorizationStateWaitTdlibParameters state =
@@ -71,8 +73,11 @@ namespace tg {
             if (access(request->database_directory_.c_str(),0) == -1) {
                 mkdir(request->database_directory_.c_str(),0666);
             }
+#elif __FreeBSD__
+            if (access(request->database_directory_.c_str(),0) == -1) {
+                mkdir(request->database_directory_.c_str(),0666);
+            }
 #endif
-
             bot->send(std::move(request),this->retry_handler);
         }
 

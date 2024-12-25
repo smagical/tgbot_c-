@@ -12,7 +12,7 @@ namespace tg {
 
         }
         void UpdateOption::hand(td::td_api::Object &&object) {
-           // log("UpdateOption::hand");
+            // log_info("UpdateOption::hand "+td::td_api::to_string(object));
         }
 
 

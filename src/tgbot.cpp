@@ -35,6 +35,7 @@ namespace tg {
         this->users =  std::make_unique<std::SafeMap<td::td_api::int53,td::td_api::object_ptr<td::td_api::user>>>(10000000,500000);
         this->user_full_info = std::make_unique<std::SafeMap<td::td_api::int53,td::td_api::object_ptr<td::td_api::userFullInfo>>>(10000000,500000);
         td::ClientManager::execute(td::td_api::make_object<td::td_api::setLogVerbosityLevel>(this->config->get_int_value(BotConfig::BOT_LOG_LEVEL)));
+        this->is_only_allow_admin = this->config->get_bool_value(BOT_IS_ONLY_ALLOW_ADMIN);
     }
 
     void Bot::init_handler() {
@@ -51,7 +52,6 @@ namespace tg {
     }
 
     void Bot::init_redis() {
-
         std::string host = this->get_config()->get_string_value(tg::BotConfig::REDIS_HOST);
         int port = this->get_config()->get_int_value(tg::BotConfig::REDIS_PORT);
         std::string username = this->get_config()->get_string_value(tg::BotConfig::REDIS_USERNAME);
@@ -169,6 +169,9 @@ namespace tg {
         this->users->remove(std::move(id));
     }
     td::td_api::object_ptr<td::td_api::user> *Bot::get_me() {
+        if (!this->self) {
+            this->self = std::move(util::get_me(this));
+        }
         return &this->self;
     }
     td::td_api::object_ptr<td::td_api::chat> *Bot::get_chat(td::td_api::int53 id)  {
@@ -198,32 +201,31 @@ namespace tg {
     }
 
     void Bot::load() {
+        std::unique_lock<std::mutex> lock(this->load_mutex);
+        if (this->is_already_loaded) return;
+        this->is_already_loaded = true;
         this->self = std::move(tg::util::get_me(this));
         log_info(td::td_api::to_string(this->self));
         tg::util::load_all_chats(this);
 
         if (this->loginType.operator*() == LoginType::TOKEN) {
-            this->add_plugin(std::make_unique<tg::plugin::BotPlugin>());
             auto bot_plugin = std::make_unique<tg::plugin::BotPlugin>();
-            //std::string ad_path = this->config->get_string_value(tg::plugin::command::SpiderCommand::AD_PATH);
-            //bot_plugin->addCommand(std::make_unique<tg::plugin::command::SpiderCommand>(ad_path));
             bot_plugin->addCommand(std::make_unique<tg::plugin::command::InfoCommand>());
             bot_plugin->addCommand(std::make_unique<tg::plugin::command::PermissionsCommand>());
             bot_plugin->addCommand(std::make_unique<tg::plugin::command::BotCommand>());
             bot_plugin->send_commands(this);
             this->add_plugin(std::move(bot_plugin));
+            log_info("Loaded Bot Plugin");
         }else {
-            this->add_plugin(std::make_unique<tg::plugin::BotPlugin>());
             auto user_plugin = std::make_unique<tg::plugin::UserPlugin>();
             user_plugin->addCommand(std::make_unique<tg::plugin::command::SpiderCommand>());
             user_plugin->addCommand(std::make_unique<tg::plugin::command::InfoCommand>());
             user_plugin->addCommand(std::make_unique<tg::plugin::command::PermissionsCommand>());
             user_plugin->addCommand(std::make_unique<tg::plugin::command::BotCommand>());
             this->add_plugin(std::move(user_plugin));
+            std::cout << "Loaded user_plugin" << std::endl;
         }
-        this->report_time = std::time(nullptr);
-        const std::string tmp = config->get_string_value(BotConfig::BOT_REPORT_KEY)+":"+config->get_string_value(BotConfig::BOT_ID);
-        this->redis_utils->set(tmp,"....",(report_timeout + report_timeout/2));
+
     }
 
     void Bot::add_plugin(std::unique_ptr<tg::plugin::PluginInterface> plugin) const {
@@ -242,13 +244,16 @@ namespace tg {
     bool Bot::can_slove_message(td::td_api::int53 chat_id, td::td_api::int53 message_id) const {
         std::string chat_id_str = std::to_string(chat_id);
         std::string message_id_str = std::to_string(message_id);
-        std::string key = BOT_REDIS_PREFIX +":"+chat_id_str + ":" + message_id_str;
+        std::string key = this->config->get_string_value(BOT_REDIS_SELECT_PREFIX) +":"+chat_id_str + ":" + message_id_str;
         return this->redis_utils->can_solve(key,this->config->get_string_value(BotConfig::BOT_ID));
     }
 
+    bool Bot::is_only_admin() const {
+        return this->is_only_allow_admin;
+    }
 
 
-    void Bot::run() const {
+    void Bot::run() {
         tg::log_info("Bot running... ");
         int waitTime = config -> get_int_value(BotConfig::BOT_MIN_WAIT_TIME);
         while (running.load()) {
@@ -259,7 +264,9 @@ namespace tg {
                 waitTime = std::min(waitTime, config -> get_int_value(BotConfig::BOT_MAX_WAIT_TIME));
                 continue;
             }
-            if (std::time(nullptr) - this->report_time >= this->report_timeout) {
+            std::chrono::milliseconds now = std::chrono::duration_cast< std::chrono::milliseconds >(std::chrono::system_clock::now().time_since_epoch());
+            if (  int64_t now_ms = now.count(); now_ms - this->report_time >= this->report_timeout) {
+                this->report_time = now_ms;
                 this->redis_utils->set(config->get_string_value(BotConfig::BOT_REPORT_KEY)+":"+config->get_string_value(BotConfig::BOT_ID),".",report_timeout + report_timeout/2);
             }
             waitTime = config -> get_int_value(BotConfig::BOT_MIN_WAIT_TIME); ;
@@ -271,13 +278,13 @@ namespace tg {
                         if (response->request_id == 0) {
                               this->dispatch->hand(std::move(*response->object));
                           }else if (std::unique_ptr<std::unique_ptr<tg::handler::Handler>> handler = this->request_and_handler->getAndRemove(response->request_id)) {
-                                  handler->operator*().hand(std::move(*response->object));
+                              handler->operator*().hand(std::move(*response->object));
                           }else {
                                handler::NoHandler no_handler;
                                no_handler.hand(std::move(*response->object));
                           }
-
                       }
+
             },response_id);
 
         }
@@ -289,6 +296,7 @@ namespace tg {
         return this->config.get();
     }
 
-    std::string Bot::BOT_REDIS_PREFIX = "bot_select";
+    std::string Bot::BOT_REDIS_SELECT_PREFIX = "BOT.SELECT_PREFIX";
+    std::string Bot::BOT_IS_ONLY_ALLOW_ADMIN = "BOT.IS_ONLY_ALLOW_ADMIN";
 
 }
