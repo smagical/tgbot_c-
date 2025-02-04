@@ -73,7 +73,10 @@ namespace tg::plugin::command {
                 for (auto it = chats.begin(); it != chats.end(); ++it) {
                     try {
                         spider(bot,*it);
-                    }catch (...){}
+                        util::send(bot,chat_id_send,*it + " end spider update");
+                    }catch (...) {
+                        util::send(bot,chat_id_send,*it + " error spider update");
+                    }
                 }
                 util::send(bot,chat_id_send, "end spider all update");
             }

@@ -157,6 +157,7 @@ namespace tg {
                     this->redis->command<sw::redis::OptionalString>(args.begin(), args.end());
                     return true;
                 }catch (sw::redis::ReplyError &e) {
+                    if (strcmp(e.what(),"Index already exists")==0) return true;
                     log_error(e.what());
                     exit(2);
                 }catch (sw::redis::TimeoutError &e) {
